@@ -1,0 +1,14 @@
+*.json
+*.csv
+*.pyc
+__pycache__/
+.env
+.vscode/
+.idea/
+.DS_Store
+logs/
+output/
+credentials.json
+token.pickle
+config/user_corrections.json
+config/secret_config.json

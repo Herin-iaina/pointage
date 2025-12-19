@@ -1,0 +1,4 @@
+pyzk
+argparse
+gspread
+oauth2client
