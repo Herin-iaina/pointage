@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # Service MongoDB
+  mongodb:
+    image: mongo:7.0
+    container_name: pointage-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: pointage
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+      - mongodb-config:/data/configdb
+    networks:
+      - pointage-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Service Python - Extraction ZK → MongoDB
+  extraction:
+    build: .
+    container_name: pointage-extraction
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      MONGODB_URI: mongodb://admin:password@mongodb:27017/pointage?authSource=admin
+    volumes:
+      - ./output:/app/output
+      - ./config:/app/config
+    networks:
+      - pointage-network
+    # Redémarrage automatique après exécution
+    restart: "no"
+
+networks:
+  pointage-network:
+    driver: bridge
+
+volumes:
+  mongodb-data:
+  mongodb-config:

@@ -1,198 +1,197 @@
 #!/usr/bin/env python3
 """
-Script maître pour l'extraction complète des données ZK Attendance.
-Refactorisé.
+Script simplifié : Extraction ZK → Insertion MongoDB
+Deux étapes uniquement :
+  1. Extraction des données depuis les pointeuses ZK
+  2. Insertion/mise à jour dans MongoDB (collections users et zkteco)
+
+Collections MongoDB :
+  - users: Utilisateurs enrichis (métadonnées)
+  - zkteco: Raw extraction ZK (name, user_id, timestamp, punch_type)
+           Détection des doublons basée sur timestamp
 """
 
 import sys
 import argparse
-import csv
+import json
 from datetime import datetime
 from pathlib import Path
 from .zk_client import ZKClient
+from .mongodb_client import MongoDBClient
 from .processor import (
     load_corrections,
     apply_corrections_to_users,
-    enrich_users_from_google_sheet,
-    check_users_not_in_attendance,
-    save_users_not_in_attendance,
-    write_user_ids_to_google_sheet,
     find_duplicate_name_users,
     save_duplicates_to_csv,
-    prepare_clean_attendance,
-    list_users_without_number,
-    save_users_to_json,
-    save_users_without_number_to_csv,
-    save_final_attendance,
-    print_statistics,
-    cleanup_intermediate_files
 )
+from .utils import parse_punch_type, PUNCH_TYPES
 
 # Configuration
 MACHINE_IPS = ['172.17.17.26', '172.17.17.27', '172.17.17.28']
+MONGODB_URI = 'mongodb://172.17.17.72:27017'
+
+
+def format_attendance_for_zkteco(all_attendance, all_users):
+    """
+    Formate les enregistrements d'attendance pour insertion dans zkteco.
+    
+    Format : {name, user_id, timestamp, punch_type}
+    """
+    # Créer un dict user_id → name
+    users_by_id = {str(u.get('user_id')): u.get('name', '') for u in all_users}
+    
+    zkteco_records = []
+    for record in all_attendance:
+        user_id = record.get('user_id')
+        timestamp = record.get('timestamp')
+        raw = record.get('raw', '')
+        
+        if not user_id or not timestamp:
+            continue
+        
+        # Parse punch type
+        punch_type_tuple = parse_punch_type(raw)
+        punch_type = PUNCH_TYPES.get(punch_type_tuple, 'Inconnu')
+        
+        zkteco_records.append({
+            'name': users_by_id.get(str(user_id), ''),
+            'user_id': int(user_id) if user_id else None,
+            'timestamp': timestamp,
+            'punch_type': punch_type
+        })
+    
+    return zkteco_records
+
 
 def main():
-    parser = argparse.ArgumentParser(description="Extraction complète ZK Attendance")
-    parser.add_argument('--keep-all', action='store_true', 
-                        help="Garder tous les fichiers CSV intermédiaires")
-    parser.add_argument('--sheet-id', type=str, 
-                        help="ID ou Nom du Google Sheet pour enrichissement")
-    parser.add_argument('--sheet-name', type=str, 
-                        help="Nom de l'onglet (feuille) à utiliser")
-    parser.add_argument('--credentials', type=str, default='credentials.json',
-                        help="Chemin vers le fichier JSON de credentials (défaut: credentials.json)")
+    parser = argparse.ArgumentParser(
+        description="Extraction ZK → Insertion MongoDB (users + zkteco)"
+    )
+    parser.add_argument(
+        '--dry-run', 
+        action='store_true',
+        help="Afficher les données sans les insérer dans MongoDB"
+    )
     args = parser.parse_args()
     
-    print("="*70)
-    print("EXTRACTION COMPLÈTE ZK ATTENDANCE (Refactored)")
-    print("="*70)
+    print("=" * 70)
+    print("🕐 EXTRACTION ZK → MONGODB (zkteco)")
+    print("=" * 70)
     
-    # ÉTAPE 1 : Chargement corrections
-    print("\n[1/6] Chargement des corrections...")
-    corrections = load_corrections()
-    print(f"  ✓ {len(corrections)} corrections chargées")
-    
-    # ÉTAPE 2 : Récupération utilisateurs
-    print("\n[2/6] Récupération des utilisateurs...")
+    # ÉTAPE 1 : Extraction ZK
+    print("\n[1/2] 📥 Extraction des données ZK...")
     try:
-        client = ZKClient(MACHINE_IPS)
-        all_users = client.collect_all_users()
+        # Corrections locales
+        corrections = load_corrections()
+        print(f"  ✓ {len(corrections)} corrections chargées")
+        
+        # Client ZK
+        zk_client = ZKClient(MACHINE_IPS)
+        
+        # Récupération utilisateurs
+        print("  📍 Récupération des utilisateurs...")
+        all_users = zk_client.collect_all_users()
+        print(f"    ✓ {len(all_users)} utilisateurs")
+        
+        # Application corrections
+        count_corrected = apply_corrections_to_users(all_users, corrections)
+        print(f"    ✓ {count_corrected} corrections appliquées")
+        
+        # Détection doublons
+        duplicates = find_duplicate_name_users(all_users)
+        if duplicates:
+            dup_file = save_duplicates_to_csv(duplicates)
+            print(f"    ⚠️  {len(duplicates)} doublons détectés → {dup_file}")
+        
+        # Récupération attendance
+        print("  📍 Récupération des enregistrements d'attendance...")
+        all_attendance = zk_client.collect_all_attendance()
+        print(f"    ✓ {len(all_attendance)} enregistrements")
+        
+        # Format pour zkteco
+        zkteco_records = format_attendance_for_zkteco(all_attendance, all_users)
+        print(f"    ✓ {len(zkteco_records)} enregistrements formatés pour zkteco")
+        
     except Exception as e:
-        print(f"  ✗ Erreur lors de l'initialisation du client ZK: {e}")
+        print(f"\n  ✗ Erreur lors de l'extraction ZK: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
+    
+    # ÉTAPE 2 : Insertion MongoDB
+    print("\n[2/2] 💾 Insertion dans MongoDB...")
+    if args.dry_run:
+        print("  ℹ️  Mode DRY-RUN (pas d'insertion)")
+        print(f"\n  📊 Données prêtes pour insertion :")
+        print(f"    - Utilisateurs : {len(all_users)}")
+        print(f"    - Enregistrements zkteco : {len(zkteco_records)}")
+        return
+    
+    try:
+        mongo_client = MongoDBClient(MONGODB_URI)
         
-    print(f"  ✓ {len(all_users)} utilisateurs récupérés")
-    
-    # ÉTAPE 3 : Application corrections
-    print("\n[3/6] Application des corrections...")
-    count_applied = apply_corrections_to_users(all_users, corrections)
-    print(f"  ✓ {count_applied} corrections appliquées")
-    
-    # ÉTAPE 3b : Enrichissement Google Sheets (numéros manquants)
-    print("\n[3b/6] Enrichissement depuis Google Sheets...")
-    if Path(args.credentials).exists():
-        count_enriched = enrich_users_from_google_sheet(
-            all_users, 
-            credentials_file=args.credentials,
-            sheet_id_or_url=args.sheet_id,
-            sheet_name=args.sheet_name or 'ACTIF'
-        )
-        print(f"  ✓ {count_enriched} numéros complétés via Google Sheets")
+        # Connexion
+        if not mongo_client.connect():
+            print("  ✗ Impossible de connecter à MongoDB")
+            sys.exit(1)
         
-        # ÉTAPE 3c : Écriture des user_id dans le Google Sheet (colonne 37)
-        print("\n[3c/6] Écriture des user_id dans le Google Sheet...")
-        count_written = write_user_ids_to_google_sheet(
-            all_users,
-            credentials_file=args.credentials,
-            sheet_id_or_url=args.sheet_id,
-            sheet_name=args.sheet_name or 'ENCODAGE',
-            column_index=37
-        )
-        print(f"  ✓ {count_written} user_id écris dans le Google Sheet")
-    else:
-        print(f"  ⚠ Fichier credentials non trouvé, enrichissement Google Sheets ignoré")
-    
-    # ÉTAPE 4 : Récupération attendance
-    print("\n[4/6] Récupération des enregistrements d'attendance...")
-    all_attendance = client.collect_all_attendance()
-    print(f"  ✓ {len(all_attendance)} enregistrements récupérés")
-    
-    # ÉTAPE 4b : Vérification des utilisateurs du Sheet sans pointage
-    print("\n[4b/6] Vérification des utilisateurs sans pointage...")
-    if Path(args.credentials).exists():
-        users_without_att = check_users_not_in_attendance(
-            all_attendance,
-            credentials_file=args.credentials,
-            sheet_id_or_url=args.sheet_id,
-            sheet_name=args.sheet_name or 'ACTIF'
-        )
-        if users_without_att:
-            csv_file, json_file = save_users_not_in_attendance(users_without_att)
-            print(f"  ✓ {len(users_without_att)} utilisateurs du Sheet sans pointage")
-            print(f"    → CSV : {csv_file}")
-            print(f"    → JSON : {json_file}")
+        # Lecture du dernier timestamp
+        print("  📍 Lecture du dernier timestamp dans zkteco...")
+        last_timestamp = mongo_client.get_last_timestamp_zkteco()
+        if last_timestamp:
+            print(f"    ℹ️  Dernier timestamp : {last_timestamp}")
+            print(f"    ℹ️  Insertion seulement des enregistrements plus récents")
         else:
-            print(f"  ✓ Tous les utilisateurs du Sheet ont des pointages")
-    else:
-        print(f"  ⚠ Vérification ignorée (credentials non trouvés)")
+            print(f"    ℹ️  Première insertion (collection vide)")
+        
+        # Insertion utilisateurs (toujours)
+        print("  📍 Insertion/mise à jour des utilisateurs...")
+        users_coll = mongo_client.db['users']
+        users_updated = 0
+        users_inserted = 0
+        
+        for user in all_users:
+            try:
+                result = users_coll.replace_one(
+                    {'user_id': int(user.get('user_id'))},
+                    user,
+                    upsert=True
+                )
+                if result.upserted_id:
+                    users_inserted += 1
+                else:
+                    users_updated += 1
+            except Exception as e:
+                print(f"    ⚠️  Erreur insertion user {user.get('user_id')}: {e}")
+        
+        print(f"    ✓ {users_inserted} inséré, {users_updated} mis à jour")
+        
+        # Insertion zkteco (avec filtre timestamp)
+        print("  📍 Insertion des enregistrements zkteco...")
+        zkteco_result = mongo_client.insert_zkteco_records(zkteco_records)
+        print(f"    ✓ {zkteco_result.get('inserted')} inséré, "
+              f"{zkteco_result.get('skipped')} ignoré (ancien), "
+              f"{zkteco_result.get('errors')} erreur(s)")
+        
+        # Statistiques finales
+        stats = mongo_client.get_statistics()
+        print(f"\n  📈 Statistiques MongoDB :")
+        print(f"    - Total utilisateurs : {stats.get('total_users', 0)}")
+        print(f"    - Utilisateurs avec numéro : {stats.get('users_with_number', 0)}")
+        print(f"    - Total enregistrements zkteco : {stats.get('total_zkteco_records', 0)}")
+        
+        mongo_client.disconnect()
+        
+    except Exception as e:
+        print(f"\n  ✗ Erreur lors de l'insertion MongoDB: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
     
-    # ÉTAPE 5 : Détection doublons
-    print("\n[5/6] Détection des doublons...")
-    duplicates = find_duplicate_name_users(all_users)
-    dup_file = None
-    if duplicates:
-        dup_file = save_duplicates_to_csv(duplicates)
-        print(f"  ✓ {len(duplicates)} groupes de doublons détectés")
-        print(f"    → Fichier : {dup_file}")
-    else:
-        print(f"  ✓ Aucun doublon détecté")
-    
-    # ÉTAPE 6 : Génération fichier final
-    print("\n[6/6] Génération du fichier final...")
-    users_dict = {str(u.get('user_id')): {
-        'name': u.get('name', ''),
-        'number': u.get('number', ''),
-    } for u in all_users}
-    
-    clean_records = prepare_clean_attendance(users_dict, all_attendance)
-    
-    final_file = save_final_attendance(clean_records)
-    print(f"  ✓ Fichier généré : {final_file}")
-    print("\n  Statistiques :")
-    print_statistics(clean_records)
-    
-    # ÉTAPE 7 : Sauvegarde utilisateurs finaux (avec corrections appliquées)
-    print("\n[7/7] Sauvegarde des utilisateurs finaux...")
-    now = datetime.now().strftime('%Y%m%d_%H%M%S')
-    users_final_file = Path('output') / f'utilisateurs_{now}.csv'
-    fieldnames = ['device_ip', 'user_id', 'name', 'title', 'number', 'privilege', 'group_id', 'card_number']
-    with open(users_final_file, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        for u in all_users:
-            row = {k: u.get(k, '') for k in fieldnames}
-            writer.writerow(row)
-    print(f"  ✓ Fichier généré : {users_final_file}")
-    # Sauvegarde en JSON des utilisateurs
-    users_json_file = save_users_to_json(all_users)
-    print(f"  ✓ Fichier JSON généré : {users_json_file}")
+    print("\n" + "=" * 70)
+    print("✅ EXTRACTION ET INSERTION TERMINÉES")
+    print("=" * 70)
 
-    # Liste des utilisateurs sans numéro
-    users_without = list_users_without_number(all_users)
-    if users_without:
-        without_csv = save_users_without_number_to_csv(all_users)
-        without_json = save_users_to_json(users_without, filename=f"utilisateurs_sans_numero_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
-        print(f"  ✓ {len(users_without)} utilisateurs sans numéro détectés")
-        print(f"    → CSV : {without_csv}")
-        print(f"    → JSON : {without_json}")
-    else:
-        print(f"  ✓ Aucun utilisateur sans numéro")
-    
-    # ÉTAPE 8 : Nettoyage fichiers intermédiaires
-    print("\n[8/8] Nettoyage des fichiers intermédiaires...")
-    keep_files = {Path(final_file).name, users_final_file.name}
-    if dup_file:
-        keep_files.add(Path(dup_file).name)
-    
-    if not args.keep_all:
-        if clean_records:
-            removed = cleanup_intermediate_files(keep_files)
-            print(f"  ✓ {removed} fichiers CSV intermédiaires supprimés")
-            print(f"  ✓ Fichiers conservés : {len(keep_files)}")
-            for f in sorted(keep_files):
-                print(f"    - {f}")
-        else:
-            print(f"  ⚠ Aucun enregistrement trouvé, conservation des anciens fichiers CSV.")
-    else:
-        print(f"  ℹ Tous les fichiers conservés (--keep-all utilisé)")
-    
-    print("\n" + "="*70)
-    print(f"✓ EXTRACTION TERMINÉE")
-    print("="*70)
-    print(f"\nFichiers finaux :")
-    for f in sorted(keep_files):
-        print(f"  - {f}")
-    print(f"\nProchaine étape : enrichir avec Google Sheet pour compléter les numéros vides")
 
 if __name__ == '__main__':
     main()
