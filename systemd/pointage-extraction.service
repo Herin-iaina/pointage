@@ -1,0 +1,26 @@
+[Unit]
+Description=ZK Attendance Extraction → MongoDB
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pointage
+WorkingDirectory=/home/pointage/pointage
+ExecStart=/usr/bin/python3 -m src.main
+
+# Logs
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pointage-extraction
+
+# Sécurité
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/home/pointage/pointage/output /home/pointage/pointage/logs
+
+# Timeouts
+TimeoutStartSec=600
+TimeoutStopSec=60

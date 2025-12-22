@@ -1,0 +1,44 @@
+# Crontab pour ZK Attendance Extraction
+# À ajouter avec : crontab -e
+#
+# Format: minute heure jour mois jour_semaine commande
+#
+# Choisissez l'une de ces lignes selon votre besoin :
+
+# ============================================================================
+# OPTION 1 : Toutes les heures (RECOMMANDÉ)
+# ============================================================================
+0 * * * * cd /home/pointage/pointage && python3 -m src.main >> logs/cron.log 2>&1
+
+# ============================================================================
+# OPTION 2 : Toutes les 30 minutes
+# ============================================================================
+# */30 * * * * cd /home/pointage/pointage && python3 -m src.main >> logs/cron.log 2>&1
+
+# ============================================================================
+# OPTION 3 : 4 fois par jour (7h, 12h, 17h, 22h)
+# ============================================================================
+# 0 7,12,17,22 * * * cd /home/pointage/pointage && python3 -m src.main >> logs/cron.log 2>&1
+
+# ============================================================================
+# OPTION 4 : Une fois par jour (7h du matin)
+# ============================================================================
+# 0 7 * * * cd /home/pointage/pointage && python3 -m src.main >> logs/cron.log 2>&1
+
+# ============================================================================
+# OPTION 5 : Toutes les 15 minutes (TRÈS FRÉQUENT)
+# ============================================================================
+# */15 * * * * cd /home/pointage/pointage && python3 -m src.main >> logs/cron.log 2>&1
+
+# ============================================================================
+# FORMAT CRON
+# ============================================================================
+# minute (0-59) | heure (0-23) | jour (1-31) | mois (1-12) | jour_semaine (0-6)
+#
+# Exemples :
+#   0 * * * *           → Toutes les heures
+#   */30 * * * *        → Toutes les 30 minutes
+#   0 7 * * *           → 7h du matin
+#   0 */6 * * *         → Toutes les 6 heures
+#   0 9-17 * * 1-5      → 9h à 17h en semaine (lun-ven)
+#   0 0 * * 0           → Dimanche à minuit

@@ -85,7 +85,7 @@ MACHINE_IPS = ['172.17.17.26', '172.17.17.27', '172.17.17.28']
 ```json
 {
   "corrections": {
-    "36": {"number": "0499/SMART", "title": "Manager"}
+    "36": {"number": "0499/", "title": ""}
   }
 }
 ```

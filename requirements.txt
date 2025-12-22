@@ -1,4 +1,6 @@
 pyzk
+pymongo
+python-dotenv
 argparse
 gspread
 oauth2client

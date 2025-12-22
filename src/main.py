@@ -12,10 +12,12 @@ Collections MongoDB :
 """
 
 import sys
+import os
 import argparse
 import json
 from datetime import datetime
 from pathlib import Path
+from dotenv import load_dotenv
 from .zk_client import ZKClient
 from .mongodb_client import MongoDBClient
 from .processor import (
@@ -26,9 +28,13 @@ from .processor import (
 )
 from .utils import parse_punch_type, PUNCH_TYPES
 
-# Configuration
-MACHINE_IPS = ['172.17.17.26', '172.17.17.27', '172.17.17.28']
-MONGODB_URI = 'mongodb://172.17.17.72:27017'
+# Charger les variables d'environnement depuis .env
+load_dotenv()
+
+# Configuration depuis les variables d'environnement
+MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://172.17.17.72:27017/pointage')
+ZK_IPS_STR = os.getenv('ZK_MACHINE_IPS', '172.17.17.26,172.17.17.27,172.17.17.28')
+MACHINE_IPS = [ip.strip() for ip in ZK_IPS_STR.split(',')]
 
 
 def format_attendance_for_zkteco(all_attendance, all_users):

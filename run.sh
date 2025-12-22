@@ -1,85 +1,128 @@
 #!/bin/bash
-# Script d'aide pour le pipeline ZK Attendance
+#
+# Script utilitaire pour ZK Attendance Pipeline
+#
 
 set -e
 
-HELP_MESSAGE="
-Usage: ./run.sh [COMMAND]
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-Commands:
-  start         Démarrer les services (MongoDB + Extraction)
-  stop          Arrêter les services
-  restart       Redémarrer les services
-  extract       Exécuter le pipeline d'extraction
-  test          Tester l'extraction (mode dry-run)
-  logs          Afficher les logs du dernier pipeline
-  mongo         Ouvrir MongoDB Shell
-  clean         Arrêter et nettoyer les services
-  help          Afficher cette aide
+# Couleurs
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
 
-Examples:
-  ./run.sh start       # Démarrer les services
-  ./run.sh extract     # Exécuter l'extraction
-  ./run.sh mongo       # Accéder à MongoDB
-  ./run.sh stop        # Arrêter les services
+show_help() {
+    cat << 'EOF'
+🕐 ZK Attendance Pipeline
 
-Configuration:
-  - MongoDB : http://localhost:27017 (admin:password)
-  - IPs pointeuses : src/main.py → MACHINE_IPS
-  - Corrections : config/user_corrections.json
-"
+Usage: ./run.sh [commande]
+
+DOCKER
+  start               Démarre les services
+  stop                Arrête les services  
+  restart             Redémarre les services
+  clean               Nettoie tout
+
+EXÉCUTION
+  extract             Lance l'extraction
+  test                Mode test (dry-run)
+
+MONITORING
+  logs                Logs en temps réel
+  mongo               MongoDB Shell
+  status              Statut
+
+SCHEDULER
+  install-scheduler   Installe scheduler (cron/systemd/docker)
+  timer-status        Statut du systemd timer
+  timer-logs          Logs du systemd timer
+
+AIDE
+  help                Cette aide
+
+EOF
+}
 
 case "${1:-help}" in
   start)
-    echo "🚀 Démarrage des services..."
+    echo -e "${BLUE}🚀 Démarrage...${NC}"
     docker-compose up -d
-    echo "✅ Services démarrés"
-    echo "   MongoDB : mongodb://admin:password@localhost:27017"
-    echo "   Attendre ~10 secondes pour la disponibilité..."
-    sleep 15
+    sleep 3
+    docker-compose ps
+    echo -e "${GREEN}✅ Démarré${NC}"
     ;;
   
   stop)
-    echo "⏹️  Arrêt des services..."
-    docker-compose stop
-    echo "✅ Services arrêtés"
+    echo -e "${YELLOW}⏹️  Arrêt...${NC}"
+    docker-compose down
+    echo -e "${GREEN}✅ Arrêté${NC}"
     ;;
   
   restart)
-    echo "🔄 Redémarrage des services..."
+    echo -e "${BLUE}🔄 Redémarrage...${NC}"
     docker-compose restart
-    echo "✅ Services redémarrés"
+    echo -e "${GREEN}✅ Redémarré${NC}"
     ;;
   
   extract)
-    echo "📥 Extraction ZK → MongoDB..."
-    docker-compose run --rm extraction
-    echo "✅ Extraction terminée"
+    echo -e "${BLUE}📥 Extraction...${NC}"
+    docker-compose run extraction python3 -m src.main
+    echo -e "${GREEN}✅ Terminé${NC}"
     ;;
   
   test)
-    echo "🧪 Test d'extraction (mode dry-run)..."
-    docker-compose run --rm extraction python3 -m src.main --dry-run
-    echo "✅ Test terminé"
+    echo -e "${BLUE}🧪 Mode test...${NC}"
+    docker-compose run extraction python3 -m src.main --dry-run
+    echo -e "${GREEN}✅ Terminé${NC}"
+    ;;
+  
+  extract-local)
+    echo -e "${BLUE}📥 Extraction locale...${NC}"
+    python3 -m src.main
+    echo -e "${GREEN}✅ Terminé${NC}"
     ;;
   
   logs)
-    echo "📋 Logs du pipeline..."
-    docker-compose logs extraction | tail -50
+    echo -e "${BLUE}📋 Logs...${NC}"
+    docker-compose logs -f extraction
     ;;
   
   mongo)
-    echo "🗄️  Ouverture de MongoDB Shell..."
-    docker-compose exec mongodb mongosh -u admin -p password --authenticationDatabase admin pointage
+    echo -e "${BLUE}🗄️  MongoDB...${NC}"
+    docker-compose exec mongodb mongosh -u admin -p password --authenticationDatabase admin
+    ;;
+  
+  status)
+    echo -e "${BLUE}📊 Statut :${NC}"
+    docker-compose ps
     ;;
   
   clean)
-    echo "🧹 Nettoyage complet..."
-    docker-compose down -v
-    echo "✅ Nettoyage terminé"
+    echo -e "${RED}🧹 Nettoyage...${NC}"
+    read -p "Sûr ? (y/n) : " confirm
+    if [ "$confirm" = "y" ]; then
+        docker-compose down -v
+        echo -e "${GREEN}✅ Nettoyé${NC}"
+    fi
+    ;;
+  
+  install-scheduler)
+    bash "$SCRIPT_DIR/install-scheduler.sh"
+    ;;
+  
+  timer-status)
+    sudo systemctl status pointage-extraction.timer
+    ;;
+  
+  timer-logs)
+    sudo journalctl -u pointage-extraction -f
     ;;
   
   help|*)
-    echo "$HELP_MESSAGE"
+    show_help
     ;;
 esac
+

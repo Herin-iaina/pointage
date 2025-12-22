@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  # Service Python - Extraction ZK → MongoDB
+  extraction:
+    build: .
+    container_name: pointage-extraction
+    environment:
+      MONGODB_URI: mongodb://172.17.17.72:27017/pointage
+    volumes:
+      - ./output:/app/output
+      - ./config:/app/config
+      - ./logs:/app/logs
+    restart: "no"
+    # Label pour le scheduler Ofelia
+    labels:
+      ofelia: "enabled"
+
+  # Scheduler Ofelia - Exécute le pipeline selon un horaire
+  scheduler:
+    image: mcuadros/ofelia:latest
+    container_name: pointage-scheduler
+    depends_on:
+      - extraction
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: daemon --docker
+    restart: unless-stopped
+    environment:
+      # Exécute le service extraction toutes les heures
+      OFELIA_JOB_EXEC_EXTRACTION_SCHEDULE: "@hourly"
+      OFELIA_JOB_EXEC_EXTRACTION_CONTAINER: "pointage-extraction"
+      OFELIA_JOB_EXEC_EXTRACTION_COMMAND: "python3 -m src.main"
+
+      # Alternativement :
+      # OFELIA_JOB_EXEC_EXTRACTION_SCHEDULE: "@every 30m"   # Toutes les 30 min
+      # OFELIA_JOB_EXEC_EXTRACTION_SCHEDULE: "0 7 * * *"     # 7h du matin

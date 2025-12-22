@@ -68,8 +68,8 @@ docker-compose down
 # Installation des dépendances
 pip install -r requirements.txt
 
-# Assurer que MongoDB tourne sur 172.17.17.72:27017
-# (ou modifier MONGODB_URI dans src/main.py)
+# Assurer que MongoDB tourne sur ip serveur et port 27017
+# (ou modifier MONGODB_URI dans .env)
 
 # Exécuter le script
 python3 -m src.main
@@ -100,16 +100,6 @@ docker-compose run extraction python3 -m src.main --dry-run
 
 Affiche les données sans les insérer.
 
-### Accéder à MongoDB
-
-```bash
-# Ouvrir MongoDB Shell
-docker-compose exec mongodb mongosh -u admin -p password --authenticationDatabase admin
-
-# Ou depuis l'extérieur
-mongosh mongodb://admin:password@localhost:27017/pointage?authSource=admin
-```
-
 **Commandes MongoDB utiles :**
 
 ```javascript
@@ -136,8 +126,8 @@ db.attendance.countDocuments()
 {
   "corrections": {
     "36": {
-      "number": "0499/SMART",
-      "title": "Manager"
+      "number": "0499/",
+      "title": ""
     }
   }
 }
@@ -170,7 +160,7 @@ MONGODB_URI = 'mongodb://localhost:27017'
 ```json
 {
   "_id": ObjectId("..."),
-  "device_ip": "172.17.17.26",
+  "device_ip": "172.0.0.26",
   "user_id": 1,
   "name": "John Doe",
   "number": "0001/RES",
@@ -212,9 +202,9 @@ sleep 15
 
 ```bash
 # Vérifier que les IPs sont correctes
-ping 172.17.17.26
-ping 172.17.17.27
-ping 172.17.17.28
+ping 172.0.0.26
+ping 172.0.0.27
+ping 172.0.0.28
 
 # Vérifier les firewall rules
 ```
@@ -240,11 +230,41 @@ Résoudre manuellement ou via corrections JSON.
 - `utilisateurs_doublons_*.csv` - Doublons détectés
 - Données finales dans MongoDB (`users`, `attendance`)
 
+## 📅 Schedulage Automatique
+
+Pour exécuter le pipeline automatiquement à intervalles réguliers, consultez [`docs/SCHEDULING.md`](docs/SCHEDULING.md).
+
+**Trois options disponibles :**
+
+1. **Systemd Timer** (Recommandé pour Linux) 🏆
+   ```bash
+   sudo systemctl enable pointage-extraction.timer
+   sudo systemctl start pointage-extraction.timer
+   ```
+
+2. **Cron** (Classique et simple)
+   ```bash
+   crontab -e
+   # Ajouter : 0 * * * * cd /path && python3 -m src.main
+   ```
+
+3. **Docker Scheduler** (Ofelia)
+   ```bash
+   docker-compose -f docker/docker-compose-scheduler.yml up -d
+   ```
+
+**Installation automatisée :**
+```bash
+bash install-scheduler.sh
+# Choisissez votre méthode (1=Systemd, 2=Cron, 3=Docker)
+```
+
 ## 🔐 Sécurité
 
 - **En production :** Changez les credentials MongoDB
 - **En production :** Utilisez un réseau Docker sécurisé
 - **En production :** Montez des volumes pour la persistence
+- **En production :** Configurez le scheduling (voir SCHEDULING.md)
 
 ## 📞 Support
 

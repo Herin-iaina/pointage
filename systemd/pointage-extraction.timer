@@ -1,0 +1,20 @@
+[Unit]
+Description=ZK Attendance Extraction Timer
+Requires=pointage-extraction.service
+
+[Timer]
+# Exécute le service 5 minutes après le démarrage du système
+OnBootSec=5min
+
+# Puis toutes les heures
+OnUnitActiveSec=1h
+
+# Rattrape les exécutions manquées si le système était arrêté
+Persistent=true
+
+# Logs
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=timers.target
