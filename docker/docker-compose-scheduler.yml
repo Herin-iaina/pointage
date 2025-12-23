@@ -5,7 +5,8 @@ services:
       context: ..
       dockerfile: Dockerfile
     container_name: pointage-extraction
-    network_mode: host
+    cap_add:
+      - NET_RAW
     environment:
       MONGODB_URI: mongodb://172.17.17.72:27017/pointage
     volumes:
@@ -19,6 +20,8 @@ services:
       ofelia.enabled: "true"
       ofelia.job-exec.extraction-hourly.schedule: "@hourly"
       ofelia.job-exec.extraction-hourly.command: "python3 -m src.main"
+    networks:
+      - pointage_net
 
   # Scheduler Ofelia
   scheduler:
@@ -30,3 +33,12 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     command: daemon --docker
     restart: unless-stopped
+    networks:
+      - pointage_net
+
+networks:
+  pointage_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
