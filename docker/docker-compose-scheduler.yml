@@ -11,7 +11,7 @@ services:
       - /opt/pointage/output:/app/output
       - /opt/pointage/config:/app/config
       - /opt/pointage/logs:/app/logs
-    restart: "no"
+    restart: unless-stopped
     labels:
       # Configuration Ofelia via labels (méthode officielle)
       ofelia: "enabled"
