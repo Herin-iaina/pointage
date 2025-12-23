@@ -5,10 +5,21 @@ Guide complet pour déployer le pipeline `pointage` sur un serveur Linux avec pl
 ## 📋 Prérequis
 
 - ✅ Docker installé (v20.10+)
-- ✅ Docker Compose installé (v2.0+)
+- ✅ **Docker Compose v2+** (v1.x cause une erreur KeyError: 'id')
 - ✅ Accès SSH au serveur
 - ✅ MongoDB accessible sur `172.17.17.72:27017`
 - ✅ Machines ZK Teco accessibles (`172.17.17.26-28`)
+
+### Vérifier/Upgrader Docker Compose
+
+```bash
+# Vérifier la version
+docker compose --version
+
+# Si vous avez docker-compose v1.x, upgrader :
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+```
 
 ## 🔧 Installation sur le serveur
 
@@ -68,51 +79,83 @@ ls -la /opt/pointage/
 
 ## 🚀 Lancer le scheduler
 
-### Option A : Depuis le répertoire `/opt/pointage/docker`
+### ⚠️ IMPORTANT : Adaptez les chemins pour Linux
+
+Sur Linux, les chemins doivent être **absolus** (`/opt/pointage/...`). Modifiez d'abord :
+
+```bash
+cd /opt/pointage/docker
+nano docker-compose-scheduler.yml
+```
+
+Changez les chemins relatifs `../` en chemins absolus `/opt/pointage/` :
+
+```yaml
+# AVANT (macOS)
+volumes:
+  - ../output:/app/output
+  - ../config:/app/config
+  - ../logs:/app/logs
+
+# APRÈS (Linux)
+volumes:
+  - /opt/pointage/output:/app/output
+  - /opt/pointage/config:/app/config
+  - /opt/pointage/logs:/app/logs
+```
+
+Ensuite, lancez avec **Docker Compose v2** (sans tiret) :
 
 ```bash
 cd /opt/pointage/docker
 
 # Démarrer les services
-docker-compose -f docker-compose-scheduler.yml up -d
+docker compose up -d
 
 # Vérifier l'état
-docker-compose -f docker-compose-scheduler.yml ps
+docker compose ps
 
-# Voir les logs
-docker-compose -f docker-compose-scheduler.yml logs -f scheduler
+# Voir les logs du scheduler
+docker compose logs -f scheduler
 ```
 
-### Option B : Depuis la racine du projet
-
-```bash
-cd /opt/pointage
-
-# Adapter les chemins dans docker-compose-scheduler.yml
-# Les chemins relatifs `../output` doivent être changés en chemins absolus
-```
+⚠️ **Important** : Utilisez `docker compose` (v2) et non `docker-compose` (v1)
 
 ## 📅 Configuration du scheduler Ofelia
 
-**Éditer le fichier :**
-```bash
-nano /opt/pointage/docker/docker-compose-scheduler.yml
-```
-
-**Modifier la variable d'environnement pour changer la fréquence :**
+**Le scheduler utilise les labels Docker (déjà configuré) :**
 
 ```yaml
-environment:
-  # Format cron standard
-  OFELIA_JOB_EXEC_EXTRACTION_SCHEDULE: "0 * * * *"  # Toutes les heures
-  
-  # Autres exemples :
-  # "0 7 * * *"       → 7h du matin (chaque jour)
-  # "0 9-17 * * *"    → Toutes les heures entre 9h et 17h
-  # "0,30 * * * *"    → Toutes les 30 minutes
-  # "@every 15m"      → Toutes les 15 minutes
-  # "@hourly"         → Toutes les heures
-  # "@daily"          → Chaque jour à minuit
+extraction:
+  labels:
+    ofelia.enabled: "true"
+    ofelia.job-exec.extraction-hourly.schedule: "@hourly"
+    ofelia.job-exec.extraction-hourly.command: "python3 -m src.main"
+```
+
+**Pour changer la fréquence :**
+
+```bash
+cd /opt/pointage/docker
+nano docker-compose-scheduler.yml
+```
+
+Modifiez le label :
+
+```yaml
+labels:
+  ofelia.job-exec.extraction-hourly.schedule: "@hourly"  # Toutes les heures
+  # Autres options :
+  # "@every 30m"      → Toutes les 30 minutes
+  # "0 7 * * *"       → 7h du matin
+  # "0 7,14 * * *"    → 7h et 14h
+  # "@daily"          → Minuit
+```
+
+Puis redémarrez :
+
+```bash
+docker compose restart scheduler
 ```
 
 ## 🔍 Monitoring et Maintenance
@@ -120,24 +163,31 @@ environment:
 ### Vérifier que le scheduler fonctionne
 
 ```bash
+cd /opt/pointage/docker
+
 # Voir tous les conteneurs
 docker ps
 
 # Voir les logs du scheduler
-docker-compose -f /opt/pointage/docker/docker-compose-scheduler.yml logs scheduler
+docker compose logs scheduler
 
-# Voir les logs de la dernière exécution extraction
-docker-compose -f /opt/pointage/docker/docker-compose-scheduler.yml logs extraction
+# Voir les logs en temps réel
+docker compose logs -f scheduler
+
+# Voir les logs de la dernière exécution
+docker compose logs extraction
 ```
 
 ### Exécuter manuellement le pipeline
 
 ```bash
-# Lancer une extraction manuelle
-docker-compose -f /opt/pointage/docker/docker-compose-scheduler.yml exec extraction python3 -m src.main --dry-run
+cd /opt/pointage/docker
 
-# Ou directement
-docker-compose -f /opt/pointage/docker/docker-compose-scheduler.yml exec extraction python3 -m src.main
+# Test (dry-run)
+docker compose exec extraction python3 -m src.main --dry-run
+
+# Exécution réelle
+docker compose exec extraction python3 -m src.main
 ```
 
 ### Vérifier les fichiers générés
@@ -154,15 +204,22 @@ cat /opt/pointage/output/utilisateurs_doublons.csv
 ## 🛑 Arrêter/Redémarrer
 
 ```bash
-# Arrêter tous les services
 cd /opt/pointage/docker
-docker-compose -f docker-compose-scheduler.yml down
+
+# Arrêter tous les services
+docker compose down
 
 # Redémarrer
-docker-compose -f docker-compose-scheduler.yml up -d
+docker compose up -d
 
-# Redémarrer en reconstruisant l'image
-docker-compose -f docker-compose-scheduler.yml up -d --build
+# Redémarrer après une mise à jour du code
+docker compose up -d --build
+
+# Redémarrer uniquement le scheduler
+docker compose restart scheduler
+
+# Voir l'état
+docker compose ps
 ```
 
 ## 🐛 Troubleshooting
@@ -191,14 +248,19 @@ Doit être : /opt/pointage/output:/app/output
 ### Le scheduler ne s'exécute pas
 
 ```bash
+cd /opt/pointage/docker
+
 # Vérifier que le service scheduler tourne
 docker ps | grep scheduler
 
 # Vérifier les logs
-docker logs pointage-scheduler
+docker compose logs scheduler
 
 # Redémarrer le scheduler
-docker-compose -f docker-compose-scheduler.yml restart scheduler
+docker compose restart scheduler
+
+# ⚠️ Si erreur "KeyError: 'id'" → Upgrader Docker Compose v2
+# Voir la section Prérequis pour les instructions d'upgrade
 ```
 
 ## 📊 Structure attendue après déploiement
@@ -245,14 +307,16 @@ Pour la production :
 ## ✅ Vérification finale
 
 ```bash
+cd /opt/pointage/docker
+
 # 1. Vérifier que les conteneurs tournent
 docker ps | grep pointage
 
 # 2. Exécuter une extraction manuelle
-docker-compose -f /opt/pointage/docker/docker-compose-scheduler.yml exec extraction python3 -m src.main --dry-run
+docker compose exec extraction python3 -m src.main --dry-run
 
 # 3. Vérifier les logs
-docker-compose -f /opt/pointage/docker/docker-compose-scheduler.yml logs extraction | tail -20
+docker compose logs extraction | tail -20
 
 # 4. Vérifier que MongoDB reçoit les données
 mongosh mongodb://172.17.17.72:27017/pointage
