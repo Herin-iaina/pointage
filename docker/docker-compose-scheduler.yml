@@ -20,8 +20,7 @@ services:
       ofelia.enabled: "true"
       ofelia.job-exec.extraction-hourly.schedule: "@hourly"
       ofelia.job-exec.extraction-hourly.command: "python3 -m src.main"
-    networks:
-      - pointage_net
+    network_mode: "host"
 
   # Scheduler Ofelia
   scheduler:
@@ -33,12 +32,4 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     command: daemon --docker
     restart: unless-stopped
-    networks:
-      - pointage_net
-
-networks:
-  pointage_net:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 10.200.0.0/16
+    # Scheduler doesn't need host net, but needs to reach docker daemon (via socket)
