@@ -4,7 +4,12 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
-    container_name: pointage-extraction
+    # container_name: pointage-extraction # Incompatible avec replicas
+    deploy:
+      replicas: 2
+      placement:
+        constraints:
+          - node.role == manager
     cap_add:
       - NET_RAW
     environment:
