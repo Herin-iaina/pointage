@@ -2,6 +2,8 @@
 
 Extraction et enrichissement des données de pointage ZKTeco avec MongoDB et Docker.
 
+> 🚀 **Déployer sur serveur Linux ?** Voir [DEPLOYMENT_LINUX.md](DEPLOYMENT_LINUX.md)
+
 ## 📋 Vue d'ensemble
 
 ```
