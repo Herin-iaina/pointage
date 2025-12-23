@@ -2,15 +2,15 @@ services:
   # Service Python - Extraction ZK → MongoDB
   extraction:
     build:
-      context: ..
+      context: /opt/pointage
       dockerfile: Dockerfile
     container_name: pointage-extraction
     environment:
       MONGODB_URI: mongodb://172.17.17.72:27017/pointage
     volumes:
-      - ../output:/app/output
-      - ../config:/app/config
-      - ../logs:/app/logs
+      - /opt/pointage/output:/app/output
+      - /opt/pointage/config:/app/config
+      - /opt/pointage/logs:/app/logs
     restart: "no"
     labels:
       # Configuration Ofelia via labels (méthode officielle)
