@@ -16,7 +16,7 @@ class ZKClient:
         """Récupère les utilisateurs depuis un appareil ZK."""
         results = []
         
-        zk = ZK(machine_ip, port=self.port, timeout=self.timeout, password=0, force_udp=False, ommit_ping=False, encoding='ISO-8859-1')
+        zk = ZK(machine_ip, port=self.port, timeout=self.timeout, password=0, force_udp=False, ommit_ping=True, encoding='ISO-8859-1')
         conn = None
         try:
             conn = zk.connect()
@@ -70,7 +70,7 @@ class ZKClient:
         """Récupère les enregistrements d'attendance depuis un appareil ZK."""
         results = []
         
-        zk = ZK(machine_ip, port=self.port, timeout=self.timeout, password=0, force_udp=False, ommit_ping=False, encoding='ISO-8859-1')
+        zk = ZK(machine_ip, port=self.port, timeout=self.timeout, password=0, force_udp=False, ommit_ping=True, encoding='ISO-8859-1')
         conn = None
         try:
             conn = zk.connect()

@@ -82,6 +82,7 @@ def main():
     
     print("=" * 70)
     print("🕐 EXTRACTION ZK → MONGODB (zkteco)")
+    print("DEBUG: ommit_ping=True enabled")
     print("=" * 70)
     
     # ÉTAPE 1 : Extraction ZK
