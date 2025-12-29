@@ -151,27 +151,27 @@ def main():
         else:
             print(f"    ℹ️  Première insertion (collection vide)")
         
-        # Insertion utilisateurs (toujours)
-        print("  📍 Insertion/mise à jour des utilisateurs...")
-        users_coll = mongo_client.db['users']
-        users_updated = 0
-        users_inserted = 0
+        # Insertion utilisateurs (DÉSACTIVÉ)
+        print("  📍 Insertion/mise à jour des utilisateurs... [DÉSACTIVÉ]")
+        # users_coll = mongo_client.db['users']
+        # users_updated = 0
+        # users_inserted = 0
         
-        for user in all_users:
-            try:
-                result = users_coll.replace_one(
-                    {'user_id': int(user.get('user_id'))},
-                    user,
-                    upsert=True
-                )
-                if result.upserted_id:
-                    users_inserted += 1
-                else:
-                    users_updated += 1
-            except Exception as e:
-                print(f"    ⚠️  Erreur insertion user {user.get('user_id')}: {e}")
+        # for user in all_users:
+        #     try:
+        #         result = users_coll.replace_one(
+        #             {'user_id': int(user.get('user_id'))},
+        #             user,
+        #             upsert=True
+        #         )
+        #         if result.upserted_id:
+        #             users_inserted += 1
+        #         else:
+        #             users_updated += 1
+        #     except Exception as e:
+        #         print(f"    ⚠️  Erreur insertion user {user.get('user_id')}: {e}")
         
-        print(f"    ✓ {users_inserted} inséré, {users_updated} mis à jour")
+        # print(f"    ✓ {users_inserted} inséré, {users_updated} mis à jour")
         
         # Insertion zkteco (avec filtre timestamp)
         print("  📍 Insertion des enregistrements zkteco...")
